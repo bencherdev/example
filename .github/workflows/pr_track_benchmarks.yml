@@ -13,7 +13,7 @@ jobs:
     env:
       BENCHER_PROJECT: example
       BENCHER_ADAPTER: json
-      BENCHER_TESTBED: ubuntu-latest
+      BENCHER_TESTBED: ubuntu-latest-track
       BENCHMARK_RESULTS: benchmark_results.json
       PR_EVENT: event.json
     steps:
