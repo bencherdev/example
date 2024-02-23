@@ -27,7 +27,7 @@ jobs:
       - name: Track Benchmarks with Bencher
         run: |
           bencher run \
-          --if-branch '${{ github.head_ref }}' \
+          --if-branch '${{ github.event.number }}/merge' \
           --else-if-branch '${{ github.base_ref }}' \
           --else-if-branch main \
           --github-actions "${{ secrets.GITHUB_TOKEN }}" \
