@@ -1,6 +1,6 @@
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, edited, synchronize]
 
 jobs:
   fork_pr_requires_review:
@@ -9,28 +9,27 @@ jobs:
     steps:
       - run: true
 
-  benchmark_pr_with_bencher:
+  benchmark_fork_pr_branch:
     needs: fork_pr_requires_review
-    name: Benchmark PR with Bencher
+    name: Continuous Benchmarking Fork PRs with Bencher
     runs-on: ubuntu-latest
-    env:
-      BENCHER_PROJECT: example
-      BENCHER_ADAPTER: json
-      BENCHER_TESTBED: ubuntu-latest-target
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: bencherdev/bencher@main
-      - name: Track Benchmarks with Bencher
+      - name: Track Fork PR Benchmarks with Bencher
         run: |
           bencher run \
-          --if-branch '${{ github.head_ref }}' \
-          --else-if-branch '${{ github.base_ref }}' \
-          --else-if-branch main \
-          --github-actions "${{ secrets.GITHUB_TOKEN }}" \
-          --token "${{ secrets.BENCHER_API_TOKEN }}" \
+          --project example \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --branch '${{ github.event.number }}/merge' \
+          --branch-start-point '${{ github.base_ref }}' \
+          --branch-start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --testbed ubuntu-latest \
+          --adapter json \
           --err \
-          "bencher mock"
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          bencher mock
