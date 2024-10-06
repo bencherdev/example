@@ -2,7 +2,7 @@ name: Track Benchmarks with Bencher
 
 on:
   workflow_run:
-    workflows: [Run and Cache Benchmarks]
+    workflows: [Run Benchmarks]
     types: [completed]
 
 jobs:
@@ -40,12 +40,13 @@ jobs:
           --project example \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch '${{ env.PR_HEAD }}' \
-          --branch-start-point '${{ env.PR_BASE }}' \
-          --branch-start-point-hash '${{ env.PR_BASE_SHA }}' \
-          --branch-reset \
+          --start-point '${{ env.PR_BASE }}' \
+          --start-point-hash '${{ env.PR_BASE_SHA }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
           --testbed ubuntu-latest \
-          --adapter json \
           --err \
+          --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-number '${{ env.PR_NUMBER }}' \
           --file "$BENCHMARK_RESULTS"
