@@ -39,14 +39,14 @@ jobs:
           bencher run \
           --project example \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --branch '${{ env.PR_HEAD }}' \
-          --start-point '${{ env.PR_BASE }}' \
-          --start-point-hash '${{ env.PR_BASE_SHA }}' \
+          --branch "$PR_HEAD" \
+          --start-point "$PR_BASE" \
+          --start-point-hash "$PR_BASE_SHA" \
           --start-point-clone-thresholds \
           --start-point-reset \
           --testbed ubuntu-latest \
           --err \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --ci-number '${{ env.PR_NUMBER }}' \
+          --ci-number "$PR_NUMBER" \
           --file "$BENCHMARK_RESULTS"
