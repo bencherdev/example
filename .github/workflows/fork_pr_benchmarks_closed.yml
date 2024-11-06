@@ -1,5 +1,5 @@
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
 
 jobs:
@@ -14,4 +14,4 @@ jobs:
           bencher archive \
           --project example \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --branch '${{ github.head_ref }}'
+          --branch "$GITHUB_HEAD_REF"
