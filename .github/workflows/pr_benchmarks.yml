@@ -17,8 +17,8 @@ jobs:
         run: |
           bencher run \
           --project example \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --branch "$GITHUB_HEAD_REF"
+          --key '${{ secrets.BENCHER_API_KEY }}' \
+          --branch "$GITHUB_HEAD_REF" \
           --start-point "$GITHUB_BASE_REF" \
           --start-point-hash '${{ github.event.pull_request.base.sha }}' \
           --start-point-clone-thresholds \

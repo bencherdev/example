@@ -41,7 +41,7 @@ jobs:
         run: |
           bencher run \
           --project example \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --key '${{ secrets.BENCHER_API_KEY }}' \
           --branch "$PR_HEAD" \
           --hash "$PR_HEAD_SHA" \
           --start-point "$PR_BASE" \

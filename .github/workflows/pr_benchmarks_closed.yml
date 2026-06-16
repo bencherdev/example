@@ -15,5 +15,5 @@ jobs:
         run: |
           bencher archive \
           --project example \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --key '${{ secrets.BENCHER_API_KEY }}' \
           --branch "$GITHUB_HEAD_REF"
