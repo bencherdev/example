@@ -40,8 +40,8 @@ jobs:
         run: echo "$HOME/.bencher-cli/bin" >> "$GITHUB_PATH"
       - name: Post PR Benchmark Results with Bencher
         env:
-          JOB_UUID: ${{ github.event.client_payload.bencher.job }}
-          PROJECT_SLUG: ${{ github.event.client_payload.bencher.project }}
+          JOB_UUID: ${{ github.event.client_payload.bencher.job || github.event.client_payload.job }}
+          PROJECT_SLUG: ${{ github.event.client_payload.bencher.project || github.event.client_payload.project }}
         run: |
           bencher run \
           --host https://dev.api.bencher.dev \
