@@ -241,16 +241,10 @@ jobs:
           EXPECT_SKIPPED: false
         # `--ci-id` needs `--github-actions`, which conflicts with `--callback-url`,
         # so the body carries the ID, and the head commit and pull request the attach reports to.
-        # It carries them twice: as top-level keys, and in the `bencher` and `github` objects.
         run: |
           body="$(jq -cn --arg sha "$HEAD_SHA" --argjson number "$PR_NUMBER" '{
             event_type: "bencher_run",
             client_payload: {
-              job: "{{ job.uuid }}",
-              project: "{{ project.slug }}",
-              number: $number,
-              sha: $sha,
-              ci_id: "raw",
               bencher: {
                 project: "{{ project.slug }}",
                 job: "{{ job.uuid }}",
