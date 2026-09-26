@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Host a dev runner for the scenarios' Jobs, after every submit job has finished:
 #
-#   runner.sh serve    serve `test-spec` as `test-runner` for 30 minutes
+#   runner.sh serve    serve `test-spec` as `test-runner` for 10 minutes
 #   runner.sh cancel   serve `no-sandbox-spec` as `test-runner-no-sandbox`, and kill the runner
 #                      once the cancel scenario's Job is running, so the server cancels that Job
 #                      when its timeout and grace period pass
@@ -26,7 +26,7 @@ serve() {
 	rotate_key test-runner
 	echo "Runner up at $(now)"
 	local status=0
-	timeout --kill-after 60s 30m runner up --runner test-runner --no-auto-update || status=$?
+	timeout --kill-after 60s 10m runner up --runner test-runner --no-auto-update || status=$?
 	# `timeout` exits 124 after it stops the runner, or 137 if the runner needed a SIGKILL.
 	if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
 		echo "Runner down at $(now)"

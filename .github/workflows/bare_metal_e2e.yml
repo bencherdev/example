@@ -326,7 +326,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
       BENCHER_API_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
       BENCHER_ADMIN_API_TOKEN: ${{ secrets.DEV_BENCHER_ADMIN_API_TOKEN }}
