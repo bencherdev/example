@@ -1,0 +1,21 @@
+#!/bin/sh
+# A stand-in benchmark: `run` prints one Bencher Metric Format result,
+# `fail` exits with an error, and `sleep <seconds>` runs long enough to cancel.
+set -eu
+
+case "${1:-}" in
+run) ;;
+fail)
+	echo "e2e-bench: failing on purpose" >&2
+	exit 1
+	;;
+sleep)
+	sleep "${2:?sleep needs a number of seconds}"
+	;;
+*)
+	echo "usage: e2e-bench run | fail | sleep <seconds>" >&2
+	exit 2
+	;;
+esac
+
+echo '{"e2e::callback": {"latency": {"value": 1000.0}}}'

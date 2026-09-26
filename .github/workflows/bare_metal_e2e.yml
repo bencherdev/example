@@ -1,0 +1,367 @@
+name: Bare Metal Callbacks E2E
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [u/ep/bare-metal-e2e-push]
+
+# Each run rotates the dev runners' keys, so two runs at once would lock out each other's runners.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  BENCHER_HOST: https://dev.api.bencher.dev
+  BENCHER_REGISTRY: dev.registry.bencher.dev
+  DEV_USER_EMAIL: muriel.bagge@nowhere.com
+  PAID_ORGANIZATION: muriel-bagge
+  PAID_PROJECT: callback-e2e
+  FREE_ORGANIZATION: callback-e2e-free
+  FREE_PROJECT: callback-e2e-free
+  IMAGE_TAG: e2e
+
+jobs:
+  cli:
+    name: Build the Bencher CLI
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - run: bencher --version
+
+  runner_build:
+    name: Build the Bencher runner
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: runner
+
+  setup:
+    name: Set up dev
+    needs: cli
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      BENCHER_API_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+      BENCHER_DEV_SUBSCRIPTION: ${{ vars.BENCHER_DEV_SUBSCRIPTION }}
+      BENCHER_DEV_PLAN_LEVEL: ${{ vars.BENCHER_DEV_PLAN_LEVEL }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - run: .github/e2e/setup.sh
+
+  submit:
+    name: Submit (${{ matrix.scenario }})
+    needs: setup
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      checks: write
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Happy path, and the plain Job beside the build time Job
+          - scenario: happy path
+            plan: paid
+            spec: test-spec
+            command: run
+          - scenario: build time
+            plan: paid
+            spec: test-spec
+            command: run
+            build_time: true
+          - scenario: failure
+            plan: paid
+            spec: test-spec
+            command: fail
+            ci_id: failure
+          - scenario: cancel
+            plan: paid
+            spec: no-sandbox-spec
+            command: sleep 600
+            ci_id: cancel
+            job_timeout: 60
+          - scenario: matrix a
+            plan: paid
+            spec: test-spec
+            command: run
+            ci_id: matrix-a
+          - scenario: matrix b
+            plan: paid
+            spec: test-spec
+            command: run
+            ci_id: matrix-b
+          - scenario: no plan
+            plan: none
+            spec: test-spec
+            command: run
+            ci_id: no-plan
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - name: Submit PR Benchmarks with Bencher
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          PLAN: ${{ matrix.plan }}
+          SPEC: ${{ matrix.spec }}
+          COMMAND: ${{ matrix.command }}
+          CI_ID: ${{ matrix.ci_id }}
+          BUILD_TIME: ${{ matrix.build_time }}
+          JOB_TIMEOUT: ${{ matrix.job_timeout }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CALLBACK_TOKEN: ${{ secrets.BENCHER_CALLBACK_TOKEN }}
+          ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEV_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+          REDACTED: CALLBACK_TOKEN ACTIONS_TOKEN DEV_TOKEN
+        run: |
+          project="$PAID_PROJECT"
+          EXPECT_SKIPPED=false
+          if [ "$PLAN" = none ]; then
+            project="$FREE_PROJECT"
+            EXPECT_SKIPPED=true
+          fi
+          export EXPECT_SKIPPED
+          options=()
+          if [ -n "$CI_ID" ]; then options+=(--ci-id "$CI_ID"); fi
+          if [ "$BUILD_TIME" = true ]; then options+=(--build-time); fi
+          if [ -n "$JOB_TIMEOUT" ]; then options+=(--job-timeout "$JOB_TIMEOUT"); fi
+          read -ra command <<< "$COMMAND"
+          .github/e2e/submit.sh "$SCENARIO" \
+          bencher run \
+          --host "$BENCHER_HOST" \
+          --project "$project" \
+          --token '${{ secrets.DEV_BENCHER_API_TOKEN }}' \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash "$BASE_SHA" \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --adapter json \
+          --image "$project:$IMAGE_TAG" \
+          --spec "$SPEC" \
+          --detach \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --ci-callback-token '${{ secrets.BENCHER_CALLBACK_TOKEN }}' \
+          "${options[@]}" \
+          /usr/local/bin/e2e-bench "${command[@]}"
+
+  submit_revoked:
+    name: Submit (revoked token)
+    needs: setup
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    # `contents: write` lets this token send a repository_dispatch, so its callback's 401 can only mean it was revoked.
+    permissions:
+      checks: write
+      contents: write
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - name: Submit PR Benchmarks with Bencher
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEV_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+          REDACTED: ACTIONS_TOKEN DEV_TOKEN
+          EXPECT_SKIPPED: false
+        run: |
+          .github/e2e/submit.sh "revoked token" \
+          bencher run \
+          --host "$BENCHER_HOST" \
+          --project "$PAID_PROJECT" \
+          --token '${{ secrets.DEV_BENCHER_API_TOKEN }}' \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash "$BASE_SHA" \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --adapter json \
+          --image "$PAID_PROJECT:$IMAGE_TAG" \
+          --spec test-spec \
+          --detach \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --ci-callback-token '${{ secrets.GITHUB_TOKEN }}' \
+          --ci-id revoked \
+          /usr/local/bin/e2e-bench run
+
+  submit_raw:
+    name: Submit (raw callback)
+    needs: setup
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - name: Submit PR Benchmarks with Bencher
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CALLBACK_TOKEN: ${{ secrets.BENCHER_CALLBACK_TOKEN }}
+          DEV_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+          REDACTED: CALLBACK_TOKEN DEV_TOKEN
+          EXPECT_SKIPPED: false
+        # `--ci-id` needs `--github-actions`, which conflicts with `--callback-url`,
+        # so the body carries the ID, and the head commit and pull request the attach reports to.
+        # It carries them twice: as top-level keys, and in the `bencher` and `github` objects.
+        run: |
+          body="$(jq -cn --arg sha "$HEAD_SHA" --argjson number "$PR_NUMBER" '{
+            event_type: "bencher_run",
+            client_payload: {
+              job: "{{ job.uuid }}",
+              project: "{{ project.slug }}",
+              number: $number,
+              sha: $sha,
+              ci_id: "raw",
+              bencher: {
+                project: "{{ project.slug }}",
+                job: "{{ job.uuid }}",
+                ci_id: "raw",
+                ci_number: $number
+              },
+              github: {sha: $sha},
+              report: "{{ report }}"
+            }
+          }')"
+          .github/e2e/submit.sh "raw callback" \
+          bencher run \
+          --host "$BENCHER_HOST" \
+          --project "$PAID_PROJECT" \
+          --token '${{ secrets.DEV_BENCHER_API_TOKEN }}' \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash "$BASE_SHA" \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --adapter json \
+          --image "$PAID_PROJECT:$IMAGE_TAG" \
+          --spec test-spec \
+          --detach \
+          --callback-url "https://api.github.com/repos/$GITHUB_REPOSITORY/dispatches" \
+          --callback-header "Accept: application/vnd.github+json" \
+          --callback-header "Authorization: Bearer $CALLBACK_TOKEN" \
+          --callback-body "$body" \
+          /usr/local/bin/e2e-bench run
+
+  submit_push:
+    name: Submit (push)
+    needs: setup
+    if: github.event_name == 'push'
+    permissions:
+      checks: write
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - name: Submit Benchmarks with Bencher
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          CALLBACK_TOKEN: ${{ secrets.BENCHER_CALLBACK_TOKEN }}
+          ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEV_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+          REDACTED: CALLBACK_TOKEN ACTIONS_TOKEN DEV_TOKEN
+          EXPECT_SKIPPED: false
+        run: |
+          .github/e2e/submit.sh push \
+          bencher run \
+          --host "$BENCHER_HOST" \
+          --project "$PAID_PROJECT" \
+          --token '${{ secrets.DEV_BENCHER_API_TOKEN }}' \
+          --branch "$GITHUB_REF_NAME" \
+          --adapter json \
+          --image "$PAID_PROJECT:$IMAGE_TAG" \
+          --spec test-spec \
+          --detach \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --ci-callback-token '${{ secrets.BENCHER_CALLBACK_TOKEN }}' \
+          --ci-id push \
+          /usr/local/bin/e2e-bench run
+
+  # Starts only after every submit job has finished, so each Job waits in the queue first.
+  runner:
+    name: Run the Jobs on a dev runner
+    needs: [setup, runner_build, submit, submit_revoked, submit_raw, submit_push]
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.runner_build.result == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      BENCHER_API_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+      BENCHER_ADMIN_API_TOKEN: ${{ secrets.DEV_BENCHER_ADMIN_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: runner
+      - run: .github/e2e/runner.sh serve
+
+  runner_cancel:
+    name: Cancel a Job mid-run
+    needs: [setup, runner_build, submit]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.setup.result == 'success' && needs.runner_build.result == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      BENCHER_API_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+      BENCHER_ADMIN_API_TOKEN: ${{ secrets.DEV_BENCHER_ADMIN_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: runner
+      - run: .github/e2e/runner.sh cancel

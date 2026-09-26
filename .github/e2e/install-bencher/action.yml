@@ -1,0 +1,63 @@
+name: Install Bencher from the job callbacks branch
+description: Install the Bencher CLI or runner built from the tip of the job callbacks branch, cached by its commit.
+
+inputs:
+  component:
+    description: "`cli` for the `bencher` CLI, or `runner` for the runner daemon"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Bencher ${{ inputs.component }} commit
+      id: commit
+      shell: bash
+      env:
+        COMPONENT: ${{ inputs.component }}
+      run: |
+        case "$COMPONENT" in
+        cli | runner) ;;
+        *)
+          echo "::error::Unknown component: $COMPONENT"
+          exit 1
+          ;;
+        esac
+        sha="$(git ls-remote https://github.com/bencherdev/bencher refs/heads/u/ep/callback/smoke | cut -f1)"
+        test -n "$sha"
+        echo "Bencher $COMPONENT from bencherdev/bencher@$sha"
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        echo "key=bencher-$COMPONENT-${ImageOS:?}-$RUNNER_ARCH-$sha" >> "$GITHUB_OUTPUT"
+    - name: Restore the Bencher ${{ inputs.component }}
+      id: restore
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.bencher-${{ inputs.component }}
+        key: ${{ steps.commit.outputs.key }}
+    - name: Install the Bencher CLI
+      if: inputs.component == 'cli' && steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        BENCHER_SHA: ${{ steps.commit.outputs.sha }}
+      run: cargo install --git https://github.com/bencherdev/bencher --rev "$BENCHER_SHA" --locked --root ~/.bencher-cli bencher_cli
+    - name: Install the Bencher runner
+      if: inputs.component == 'runner' && steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        BENCHER_SHA: ${{ steps.commit.outputs.sha }}
+      run: |
+        sudo apt-get update && sudo apt-get install -y musl-tools
+        rustup target add x86_64-unknown-linux-musl
+        # The release runner embeds a static `bencher-init` for its VMs.
+        cargo install --git https://github.com/bencherdev/bencher --rev "$BENCHER_SHA" --locked --target x86_64-unknown-linux-musl --root "$RUNNER_TEMP/bencher-init" bencher_init
+        BENCHER_INIT_PATH="$RUNNER_TEMP/bencher-init/bin/bencher-init" cargo install --git https://github.com/bencherdev/bencher --rev "$BENCHER_SHA" --locked --root ~/.bencher-runner bencher_runner_cli
+    - name: Save the Bencher ${{ inputs.component }}
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: ~/.bencher-${{ inputs.component }}
+        key: ${{ steps.commit.outputs.key }}
+    - name: Add the Bencher ${{ inputs.component }} to the path
+      shell: bash
+      env:
+        COMPONENT: ${{ inputs.component }}
+      run: echo "$HOME/.bencher-$COMPONENT/bin" >> "$GITHUB_PATH"
