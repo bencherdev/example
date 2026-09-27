@@ -245,7 +245,7 @@ jobs:
               bencher: {
                 project: "{{ project.slug }}",
                 job: "{{ job.uuid }}",
-                ci_id: "raw",
+                ci_id: "raw {{ project.name }}",
                 ci_number: $number
               },
               github: {sha: $sha},
