@@ -115,7 +115,8 @@ jobs:
             spec: test-spec
             command: run
             ci_id: matrix-b
-          - scenario: no plan
+          # A `repository_dispatch` callback is sealed on every plan.
+          - scenario: free dispatch
             plan: none
             spec: test-spec
             command: run
@@ -140,14 +141,10 @@ jobs:
           ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEV_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
           REDACTED: CALLBACK_TOKEN ACTIONS_TOKEN DEV_TOKEN
+          EXPECT_SKIPPED: false
         run: |
           project="$PAID_PROJECT"
-          EXPECT_SKIPPED=false
-          if [ "$PLAN" = none ]; then
-            project="$FREE_PROJECT"
-            EXPECT_SKIPPED=true
-          fi
-          export EXPECT_SKIPPED
+          if [ "$PLAN" = none ]; then project="$FREE_PROJECT"; fi
           options=()
           if [ -n "$CI_ID" ]; then options+=(--ci-id "$CI_ID"); fi
           if [ "$BUILD_TIME" = true ]; then options+=(--build-time); fi
@@ -275,6 +272,53 @@ jobs:
           --callback-body "$body" \
           /usr/local/bin/e2e-bench run
 
+  # Any callback but a `repository_dispatch` still needs a paid plan.
+  submit_free_callback:
+    name: Submit (free custom callback)
+    needs: setup
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/e2e/install-bencher
+        with:
+          component: cli
+      - name: Submit PR Benchmarks with Bencher
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEV_TOKEN: ${{ secrets.DEV_BENCHER_API_TOKEN }}
+          REDACTED: RECEIVER_TOKEN DEV_TOKEN
+          EXPECT_SKIPPED: true
+          CALLBACK_PATH: /bencher/callback
+        # The receiver is on a reserved domain, and the skipped callback is never sent,
+        # so its header carries a throwaway value that only the redaction check reads.
+        run: |
+          RECEIVER_TOKEN="$(openssl rand -hex 16)"
+          echo "::add-mask::$RECEIVER_TOKEN"
+          export RECEIVER_TOKEN
+          .github/e2e/submit.sh "free custom callback" \
+          bencher run \
+          --host "$BENCHER_HOST" \
+          --project "$FREE_PROJECT" \
+          --token '${{ secrets.DEV_BENCHER_API_TOKEN }}' \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash "$BASE_SHA" \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --adapter json \
+          --image "$FREE_PROJECT:$IMAGE_TAG" \
+          --spec test-spec \
+          --detach \
+          --callback-url "https://receiver.example$CALLBACK_PATH" \
+          --callback-header "Authorization: Bearer $RECEIVER_TOKEN" \
+          /usr/local/bin/e2e-bench run
+
   submit_push:
     name: Submit (push)
     needs: setup
@@ -315,7 +359,7 @@ jobs:
   # Starts only after every submit job has finished, so each Job waits in the queue first.
   runner:
     name: Run the Jobs on a dev runner
-    needs: [setup, runner_build, submit, submit_revoked, submit_raw, submit_push]
+    needs: [setup, runner_build, submit, submit_revoked, submit_raw, submit_free_callback, submit_push]
     if: ${{ !cancelled() && needs.setup.result == 'success' && needs.runner_build.result == 'success' }}
     permissions:
       contents: read

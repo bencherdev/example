@@ -4,7 +4,8 @@
 #   submit.sh <scenario> bencher run ...
 #
 # REDACTED lists the environment variables whose values must never be printed,
-# and EXPECT_SKIPPED says whether the server should skip the callback for want of a plan.
+# EXPECT_SKIPPED says whether the server should skip the callback for want of a plan,
+# and CALLBACK_PATH is the callback URL's path, which the CLI must never print (default `/dispatches`).
 set -euo pipefail
 
 scenario="$1"
@@ -34,7 +35,7 @@ done
 if ! grep -qF '"authorization": "************"' "$out"; then
 	fail "the Bencher New Report echo does not show the CLI's mask for the authorization header"
 fi
-if grep -qF '/dispatches' "$out" "$err"; then
+if grep -qF -- "${CALLBACK_PATH:-/dispatches}" "$out" "$err"; then
 	fail "the CLI printed the callback URL past its origin"
 fi
 
