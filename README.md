@@ -16,4 +16,4 @@ The `.github` directory contains example workflows from [how to use Bencher in G
   - [Post results of finished Jobs to pull requests](.github/workflows/pr_bare_metal_benchmarks_attach.yml)
 
 These examples use the [Bencher CLI GitHub Action](https://github.com/marketplace/actions/bencher-cli).
-The bare metal example's benchmark Image is the [Bencher CLI image](https://github.com/bencherdev/bencher/pkgs/container/bencher), so its benchmark command is `mock`.
+The bare metal example's benchmark Image is the [Bencher CLI image](https://github.com/bencherdev/bencher/pkgs/container/bencher), whose entrypoint is `bencher` and which has no shell, so its benchmark command is `mock` with `--exec`.

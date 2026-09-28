@@ -28,4 +28,5 @@ jobs:
           --detach \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-callback-token '${{ secrets.BENCHER_CALLBACK_TOKEN }}' \
+          --exec \
           mock
