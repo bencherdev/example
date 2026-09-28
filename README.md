@@ -11,5 +11,7 @@ The `.github` directory contains example workflows from [how to use Bencher in G
   - [Run benchmarks](.github/workflows/fork_pr_benchmarks_run.yml)
   - [Track benchmarks](.github/workflows/fork_pr_benchmarks_track.yml)
   - [Archive branches for closed pull requests from forks](.github/workflows/fork_pr_benchmarks_closed.yml)
+- Benchmark pull requests on Bare Metal
+  - [Post results of finished Jobs to pull requests](.github/workflows/pr_bare_metal_benchmarks_attach.yml)
 
 These examples use the [Bencher CLI GitHub Action](https://github.com/marketplace/actions/bencher-cli).
