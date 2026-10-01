@@ -1,3 +1,5 @@
+name: Base Branch Benchmarks with Bencher
+
 on:
   push:
     branches: main

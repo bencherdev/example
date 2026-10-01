@@ -1,3 +1,5 @@
+name: Attach Bare Metal PR Benchmarks with Bencher
+
 on:
   repository_dispatch:
     types: [bencher_run]

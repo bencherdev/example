@@ -1,3 +1,5 @@
+name: Archive Closed PR Branch with Bencher
+
 on:
   pull_request:
     types: [closed]
