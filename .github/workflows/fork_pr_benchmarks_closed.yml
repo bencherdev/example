@@ -16,4 +16,4 @@ jobs:
           bencher archive \
           --project example \
           --key '${{ secrets.BENCHER_API_KEY }}' \
-          --branch "$GITHUB_HEAD_REF"
+          --branch "fork/$GITHUB_HEAD_REF"
