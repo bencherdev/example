@@ -1,4 +1,4 @@
-# Bencher Examples
+# Bencher Examples (Test Bare Metal)
 
 [Bencher](https://bencher.dev) is a suite of [continuous benchmarking](https://bencher.dev/docs/explanation/continuous-benchmarking/) tools.
 The `.github` directory contains example workflows from [how to use Bencher in GitHub Actions](https://bencher.dev/docs/how-to/github-actions/).
